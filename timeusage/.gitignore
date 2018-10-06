@@ -1,0 +1,13 @@
+#SBT folders
+/target
+/project/target
+/project/project
+
+# Idea IDE
+/.idea
+
+# MAC OS
+.DS_Store
+
+# Project specific
+/src/main/resources/stackoverflow/stackoverflow.csv
