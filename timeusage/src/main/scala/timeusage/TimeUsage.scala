@@ -6,12 +6,21 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 /** Main class */
-object TimeUsage {
+object TimeUsage extends TimeUsage {
 
-  import org.apache.spark.sql.SparkSession
+  /** Main function */
+  def main(args: Array[String]): Unit = {
+    //timeUsageByLifePeriod()
+    val (columns, initDf) = read("/timeusage/atussum.csv")
+    initDf.show()
+  }
+}
+
+class TimeUsage extends Serializable {
+
   import org.apache.spark.sql.functions._
 
-  val spark: SparkSession =
+  @transient lazy val spark: SparkSession =
     SparkSession
       .builder()
       .appName("Time Usage")
@@ -21,10 +30,6 @@ object TimeUsage {
   // For implicit conversions like converting RDDs to DataFrames
   import spark.implicits._
 
-  /** Main function */
-  def main(args: Array[String]): Unit = {
-    timeUsageByLifePeriod()
-  }
 
   def timeUsageByLifePeriod(): Unit = {
     val (columns, initDf) = read("/timeusage/atussum.csv")
@@ -62,15 +67,22 @@ object TimeUsage {
     *         have type Double. None of the fields are nullable.
     * @param columnNames Column names of the DataFrame
     */
-  def dfSchema(columnNames: List[String]): StructType =
-    ???
+  def dfSchema(columnNames: List[String]): StructType = {
+    val firstColumn = StructField(columnNames.head, StringType, nullable = false)
+    val otherColumns: List[StructField] = columnNames.tail.map(StructField(_ ,DoubleType, nullable = false))
+    StructType(firstColumn :: otherColumns)
+  }
 
 
   /** @return An RDD Row compatible with the schema produced by `dfSchema`
     * @param line Raw fields
     */
-  def row(line: List[String]): Row =
-    ???
+  def row(line: List[String]): Row = {
+
+    //Assumes first element will be a String and the rest of the elements will be converted to Double
+    val newValues = List(line.head) ++ line.tail.map((s: String) => s.toDouble)
+    Row.fromSeq(newValues)
+  }
 
   /** @return The initial data frame columns partitioned in three groups: primary needs (sleeping, eating, etc.),
     *         work and other (leisure activities)
@@ -88,7 +100,25 @@ object TimeUsage {
     *    “t10”, “t12”, “t13”, “t14”, “t15”, “t16” and “t18” (those which are not part of the previous groups only).
     */
   def classifiedColumns(columnNames: List[String]): (List[Column], List[Column], List[Column]) = {
-    ???
+
+    val primaryActivities = List("t01","t03","t11","t1801","t1803")
+    val workingActivities = List("t05","t1805")
+    val otherActivities = List("t02","t04","t06","t07","t08","t09","t10","t12","t13","t14","t15","t16","t18")
+
+    val isPrimary: PartialFunction[String, Column] = {
+      case name if primaryActivities.count(name.startsWith) == 1 => col(name)
+    }
+
+    val isWorking: PartialFunction[String, Column] = {
+      case name if workingActivities.count(name.startsWith) == 1 => col(name)
+    }
+
+    val isOther: PartialFunction[String, Column] = {
+      case name if otherActivities.count(name.startsWith) == 1 => col(name)
+    }
+
+    (columnNames.collect(isPrimary), columnNames.collect(isWorking), columnNames.collect(isOther))
+
   }
 
   /** @return a projection of the initial DataFrame such that all columns containing hours spent on primary needs
