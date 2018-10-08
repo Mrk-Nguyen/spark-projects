@@ -21,11 +21,15 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll {
         .getOrCreate()
   }
 
-  import testObject.spark.implicits._
-
   val surveySource = "/timeusage/atussum.csv"
   val surveySourceSample = "/atussum-sample.csv"
 
+  trait RawDF {
+    val (columns, dataFrame) = testObject.read(surveySourceSample)
+    val primaryVerify = List(14.6, 14.2, 10.9, 15.4, 11.8, 13.6, 10.2, 10.5, 10.5, 14.3)
+    val workingVerify = List(1.0, 0.0, 0.0, 0.0, 3.6, 0.0, 4.5, 6.4, 3.7, 0.0)
+    val otherVerify = List(8.4, 9.8, 13.1, 8.6, 8.9, 10.2, 9.7, 7.7, 10.2, 9.7)
+  }
 
   override def afterAll(): Unit = {
     testObject.spark.stop()
@@ -70,13 +74,62 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   ignore("classifiedColumns return the right number of groupings") {
-    val (columns, dataFrame) = testObject.read(surveySourceSample)
 
-    val (primary,working,other) = testObject.classifiedColumns(columns)
+    new RawDF {
+      val (primary,working,other) = testObject.classifiedColumns(columns)
 
-    assert(primary.size === 55, "Primary grouping should contain 55 columns")
-    assert(working.size === 23, "Working grouping should contain 2 columns")
-    assert(other.size === 354, "Other grouping should contain 354 columns")
+      assert(primary.size === 55, "Primary grouping should contain 55 columns")
+      assert(working.size === 23, "Working grouping should contain 2 columns")
+      assert(other.size === 354, "Other grouping should contain 354 columns")
+    }
+
+  }
+
+  ignore("timeUsageSummary returns correct new dataframe") {
+
+    new RawDF {
+      val (primary, working, other) = testObject.classifiedColumns(columns)
+      val df = testObject.timeUsageSummary(primary, working, other, dataFrame)
+      assert(df.count() === 100, "Dataframe should contain 100 rows")
+    }
+  }
+
+  ignore("timeUsageGrouped returns correct aggregations") {
+
+    //Calculate dataframe
+    new RawDF {
+      val (primary, working, other) = testObject.classifiedColumns(columns)
+
+      val df = testObject.timeUsageSummary(primary, working, other, dataFrame)
+      val dfGrouped = testObject.timeUsageGrouped(df)
+
+      //Verify dataframe aggregation
+      val primaryAgg = dfGrouped.select("primaryNeeds").collect().map(_.get(0)).toList
+      val workingAgg = dfGrouped.select("work").collect().map(_.get(0)).toList
+      val otherAgg = dfGrouped.select("other").collect().map(_.get(0)).toList
+
+      assert(primaryVerify.equals(primaryAgg), "primaryNeeds aggregation does not match against expected")
+      assert(workingVerify.equals(workingAgg), "working aggregation does not match against expected")
+      assert(otherVerify.equals(otherAgg), "other aggregation does not match against expected")
+    }
+
+  }
+
+  test("timeUsageGroupedSql returns correct aggregations") {
+    new RawDF {
+      val (primary, working, other) = testObject.classifiedColumns(columns)
+      val df = testObject.timeUsageSummary(primary, working, other, dataFrame)
+      val dfGrouped = testObject.timeUsageGroupedSql(df)
+
+      //Verify dataframe aggregation
+      val primaryAgg = dfGrouped.select("primaryNeeds").collect().map(_.get(0)).toList
+      val workingAgg = dfGrouped.select("work").collect().map(_.get(0)).toList
+      val otherAgg = dfGrouped.select("other").collect().map(_.get(0)).toList
+
+      assert(primaryVerify.equals(primaryAgg), "primaryNeeds aggregation does not match against expected")
+      assert(workingVerify.equals(workingAgg), "working aggregation does not match against expected")
+      assert(otherVerify.equals(otherAgg), "other aggregation does not match against expected")
+    }
   }
 
 }
