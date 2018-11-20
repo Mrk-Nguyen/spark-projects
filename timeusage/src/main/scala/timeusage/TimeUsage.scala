@@ -101,17 +101,18 @@ class TimeUsage extends Serializable {
     val primaryActivities = List("t01","t03","t11","t1801","t1803")
     val workingActivities = List("t05","t1805")
     val otherActivities = List("t02","t04","t06","t07","t08","t09","t10","t12","t13","t14","t15","t16","t18")
+    val otherActivitiesException = List("t1801","t1803","t1805")
 
     val isPrimary: PartialFunction[String, Column] = {
-      case name if primaryActivities.count(name.startsWith) == 1 => col(name)
+      case name if primaryActivities.count(name.startsWith) >= 1 => col(name)
     }
 
     val isWorking: PartialFunction[String, Column] = {
-      case name if workingActivities.count(name.startsWith) == 1 => col(name)
+      case name if workingActivities.count(name.startsWith) >= 1 => col(name)
     }
 
     val isOther: PartialFunction[String, Column] = {
-      case name if otherActivities.count(name.startsWith) == 1 => col(name)
+      case name if (otherActivities.count(name.startsWith) >= 1) & (otherActivitiesException.count(name.startsWith) == 0)  => col(name)
     }
 
     (columnNames.collect(isPrimary), columnNames.collect(isWorking), columnNames.collect(isOther))
