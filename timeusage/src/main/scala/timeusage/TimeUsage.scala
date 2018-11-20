@@ -22,7 +22,7 @@ class TimeUsage extends Serializable {
     SparkSession
       .builder()
       .appName("Time Usage")
-      .config("spark.master", "local[6]")
+      .config("spark.master", "local[*]")
       .getOrCreate()
 
   // For implicit conversions like converting RDDs to DataFrames
@@ -184,7 +184,7 @@ class TimeUsage extends Serializable {
 
     df
       .select(workingStatusProjection, sexProjection, ageProjection, primaryNeedsProjection, workProjection, otherProjection)
-      .where($"telfs" <= 4) // Discard people who are not in labor force
+      .where("telfs != 5") // Discard people who are not in labor force
   }
 
   /** @return the average daily time (in hours) spent in primary needs, working or leisure, grouped by the different
@@ -246,7 +246,7 @@ class TimeUsage extends Serializable {
     * cast them at the same time.
     */
   def timeUsageSummaryTyped(timeUsageSummaryDf: DataFrame): Dataset[TimeUsageRow] =
-    ???
+    timeUsageSummaryDf.as[TimeUsageRow]
 
   /**
     * @return Same as `timeUsageGrouped`, but using the typed API when possible
@@ -260,9 +260,21 @@ class TimeUsage extends Serializable {
     * Hint: you should use the `groupByKey` and `typed.avg` methods.
     */
   def timeUsageGroupedTyped(summed: Dataset[TimeUsageRow]): Dataset[TimeUsageRow] = {
-    import org.apache.spark.sql.expressions.scalalang.typed
-    ???
-  }
+      import org.apache.spark.sql.expressions.scalalang.typed
+
+      summed.
+        groupByKey( t => (t.working,t.sex,t.age) ).
+        agg(typed.avg[TimeUsageRow](_.primaryNeeds).name("primaryNeeds"),
+           typed.avg[TimeUsageRow](_.work).name("work"),
+           typed.avg[TimeUsageRow](_.other).name("other")).
+        select($"key._1".name("working"),$"key._2".name("sex"),$"key._3".name("age"),
+               $"primaryNeeds",$"work",$"other").
+        withColumn("primaryNeeds",round($"primaryNeeds",1)).
+        withColumn("work",round($"work",1)).
+        withColumn("other",round($"other",1)).
+        sort("working","sex","age").
+        as[TimeUsageRow]
+    }
 }
 
 /**
